@@ -1,0 +1,230 @@
+#!/bin/bash
+
+# --- Configuration: Colors & Formatting ---
+BOLD="\033[1m"
+RED="\033[1;31m"
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+BLUE="\033[1;34m"
+CYAN="\033[1;36m"
+RESET="\033[0m"
+
+ICON_CHECK="${GREEN}✔${RESET}"
+ICON_CROSS="${RED}✘${RESET}"
+ICON_ARROW="${BLUE}➜${RESET}"
+ICON_INFO="${CYAN}ℹ${RESET}"
+ICON_GEAR="${YELLOW}⚙${RESET}"
+ICON_Q="${YELLOW}?${RESET}"
+
+# --- Function: Ask for Confirmation ---
+ask_to_install() {
+    local cmd_preview="$1"
+    echo -e "${ICON_Q} ${BOLD}pdftk is missing.${RESET}"
+    echo -e "   System detected: ${BOLD}${PRETTY_NAME:-$ID}${RESET}"
+    echo -e "   Proposed command: ${YELLOW}$cmd_preview${RESET}"
+    echo ""
+    echo -e -n "${BOLD}Do you want to install it now? [y/N] ${RESET}"
+    read response
+    if [[ ! "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
+        echo -e "${ICON_CROSS} ${RED}Aborted by user.${RESET}"
+        exit 1
+    fi
+}
+
+# --- Function: Install pdftk ---
+install_pdftk() {
+    # 1. Detect OS
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS_ID=$ID
+        OS_LIKE=$ID_LIKE
+    else
+        echo -e "${ICON_CROSS} ${RED}Could not detect Linux distribution.${RESET}"
+        exit 1
+    fi
+
+    # 2. Select Installation Method
+    case "$OS_ID" in
+        # --- Fedora Family ---
+        fedora)
+            if command -v rpm-ostree &> /dev/null && [ -f /run/ostree-booted ]; then
+                echo -e "${ICON_Q} ${BOLD}Immutable Fedora System detected.${RESET}"
+                echo "   1) Layer package (Requires reboot)"
+                echo "   2) Cancel"
+                echo -e -n "${YELLOW}Choose [1/2]: ${RESET}"
+                read choice
+                if [ "$choice" == "1" ]; then
+                      ask_to_install "sudo rpm-ostree install pdftk-java"
+                      sudo rpm-ostree install pdftk-java
+                      echo -e "${ICON_INFO} ${YELLOW}Please reboot to apply changes.${RESET}"
+                      exit 0
+                else
+                    exit 1
+                fi
+            else
+                ask_to_install "sudo dnf install pdftk-java"
+                sudo dnf install -y pdftk-java
+            fi
+            ;;
+
+        # --- Debian/Ubuntu Family ---
+        debian|ubuntu|linuxmint|pop|kali|elementary)
+            ask_to_install "sudo apt install pdftk-java"
+            sudo apt update && sudo apt install -y pdftk-java
+            ;;
+
+        # --- Arch Linux Family ---
+        arch|manjaro|endeavouros|garuda)
+            ask_to_install "sudo pacman -S pdftk"
+            sudo pacman -S --noconfirm pdftk
+            ;;
+
+        # --- OpenSUSE Family ---
+        opensuse*|suse)
+            ask_to_install "sudo zypper install pdftk"
+            sudo zypper install -y pdftk
+            ;;
+
+        # --- Alpine Linux ---
+        alpine)
+            ask_to_install "sudo apk add pdftk"
+            sudo apk add pdftk
+            ;;
+
+        # --- Void Linux ---
+        void)
+            ask_to_install "sudo xbps-install pdftk"
+            sudo xbps-install -S pdftk
+            ;;
+
+        # --- Solus ---
+        solus)
+            ask_to_install "sudo eopkg install pdftk"
+            sudo eopkg it pdftk
+            ;;
+
+        # --- Catch-all ---
+        *)
+            if [[ "$OS_LIKE" == *"debian"* || "$OS_LIKE" == *"ubuntu"* ]]; then
+                ask_to_install "sudo apt install pdftk-java"
+                sudo apt update && sudo apt install -y pdftk-java
+            elif [[ "$OS_LIKE" == *"arch"* ]]; then
+                 ask_to_install "sudo pacman -S pdftk"
+                 sudo pacman -S --noconfirm pdftk
+            elif [[ "$OS_LIKE" == *"fedora"* ]]; then
+                 ask_to_install "sudo dnf install pdftk-java"
+                 sudo dnf install -y pdftk-java
+            else
+                echo -e "${ICON_CROSS} ${RED}Unsupported Linux distribution.${RESET}"
+                exit 1
+            fi
+            ;;
+    esac
+
+    if ! command -v pdftk &> /dev/null; then
+        echo -e "\n${ICON_CROSS} ${RED}Installation failed.${RESET}"
+        exit 1
+    else
+        echo -e "\n${ICON_CHECK} ${GREEN}pdftk installed successfully!${RESET}\n"
+    fi
+}
+
+# --- Main Script Execution ---
+
+# 1. Check Prerequisites
+if ! command -v pdftk &> /dev/null; then
+    install_pdftk
+fi
+
+# 2. Check Arguments
+if [ "$#" -ne 1 ]; then
+    echo -e "${YELLOW}Usage:${RESET} $0 <input_pdf_file>"
+    exit 1
+fi
+
+INPUT_PDF="$1"
+BASENAME=$(basename "$INPUT_PDF" .pdf)
+META_FILE="${BASENAME}_metadata.txt"
+OUTPUT_PDF="${BASENAME}_fixed.pdf"
+
+# 3. Validate Input File
+if [ ! -f "$INPUT_PDF" ]; then
+    echo -e "${ICON_CROSS} ${RED}Error: File '$INPUT_PDF' not found.${RESET}"
+    exit 1
+fi
+
+clear
+echo -e "${BOLD}=======================${RESET}\n"
+echo -e "${BOLD}PDF Metadata Fixer Tool${RESET}"
+echo -e "${BOLD}=======================${RESET}\n"
+
+# 4. Data Dump
+echo -e "${ICON_ARROW} ${BOLD}Step 1: Extracting Metadata...${RESET}"
+pdftk "$INPUT_PDF" data_dump output "$META_FILE"
+if [ $? -ne 0 ]; then
+    echo -e "   ${ICON_CROSS} ${RED}Failed to dump data.${RESET}"
+    exit 1
+fi
+echo -e "   ${ICON_CHECK} Metadata dumped to: ${CYAN}$META_FILE${RESET}\n"
+
+# 5. Auto-Cleanup (Updated Logic)
+echo -e "${ICON_ARROW} ${BOLD}Step 2: Automating Cleanup...${RESET}"
+
+# A. ALWAYS remove bloat lines (PageMedia) regardless of bookmarks
+sed -i '/^PageMedia/d' "$META_FILE"
+echo -e "   ${ICON_CHECK} Removed 'PageMedia' bloat lines."
+
+# B. Check for bookmarks to decide on template
+if grep -q "BookmarkBegin" "$META_FILE"; then
+    # Case: Bookmarks exist
+    echo -e "   ${ICON_INFO} ${CYAN}Existing bookmarks detected.${RESET}"
+    echo -e "   ${ICON_CHECK} Skipped appending template (preserved existing).\n"
+else
+    # Case: No Bookmarks -> Add Template
+    cat <<EOT >> "$META_FILE"
+
+# ---------------------------------------------------------
+# ADD YOUR BOOKMARKS BELOW
+# ---------------------------------------------------------
+# BookmarkBegin
+# BookmarkTitle: Chapter 1
+# BookmarkLevel: 1
+# BookmarkPageNumber: 1
+EOT
+    echo -e "   ${ICON_CHECK} Appended bookmark template.\n"
+fi
+
+# 6. User Editing
+echo -e "${ICON_ARROW} ${BOLD}Step 3: Editing Metadata${RESET}"
+echo -e "   ${ICON_INFO} ${YELLOW}Instructions:${RESET}"
+echo -e "      1. Change ${BOLD}InfoValue${RESET} (Author, Title)."
+echo -e "      2. Add Bookmarks at the bottom."
+echo -e "      3. Save and Exit."
+echo ""
+echo -e -n "${BOLD}Press [ENTER] to open your text editor...${RESET}"
+read
+
+EDITOR_CMD="${VISUAL:-${EDITOR:-nano}}"
+$EDITOR_CMD "$META_FILE"
+echo -e "\n   ${ICON_CHECK} Editor closed.\n"
+
+# 7. Update PDF
+echo -e "${ICON_ARROW} ${BOLD}Step 4: Creating New PDF...${RESET}"
+pdftk "$INPUT_PDF" update_info "$META_FILE" output "$OUTPUT_PDF"
+
+if [ $? -eq 0 ]; then
+    echo -e "\n${GREEN}${BOLD}SUCCESS!${RESET} New file: ${GREEN}$OUTPUT_PDF${RESET}\n"
+    
+    # Cleanup Prompt
+    echo -e -n "${YELLOW}Delete temp file ($META_FILE)? [y/N] ${RESET}"
+    read response
+    if [[ "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
+        rm "$META_FILE"
+        echo -e "   ${ICON_CHECK} Deleted."
+    else
+        echo -e "   ${ICON_INFO} Kept."
+    fi
+else
+    echo -e "${ICON_CROSS} ${RED}Error: Failed to create PDF.${RESET}"
+    exit 1
+fi
