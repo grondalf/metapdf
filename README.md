@@ -24,10 +24,10 @@ An interactive bash script that makes the creation and editing of PDF bookmarks 
 ## Usage
 
 Pass the PDF file you want to edit as an argument:
-    ```bash
-    metapdf my_document.pdf
-    ```
+```bash
+metapdf my_document.pdf
+```
 
 ## Disclaimer
 
-The script was made with AI assistance. Please check the code before running it.
+The script was made with AI assistance and for personal use. Please check the code before running it.
