@@ -6,8 +6,9 @@ An interactive bash script that makes the creation and editing of PDF bookmarks 
 
 * Automatically detects your Linux distribution (Debian, Fedora, Arch, Alpine, etc.) and offers to install `pdftk` if missing.
 * Automatically removes bloatware metadata lines that clutter the file.
-* Opens your system's default text editor for easy modification and injects a ready-to-use template.
-* Never overwrites the original file; creates a new `_fixed.pdf` version instead.
+* Asks interactively for bookmark name, page and level.
+* Opens your system's default text editor for review.
+* Creates a new `_fixed.pdf` file version to avoid overwriting the original file.
 
 ## Installation
 
