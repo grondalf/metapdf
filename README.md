@@ -25,7 +25,7 @@ An interactive bash script that makes the creation and editing of PDF bookmarks 
 
 Pass the PDF file you want to edit as an argument:
     ```bash
-    ./pdf-fixer.sh my_document.pdf
+    metapdf my_document.pdf
     ```
 
 ## Disclaimer
